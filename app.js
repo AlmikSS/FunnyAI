@@ -1,13 +1,12 @@
 /**
  * CCG AI - Core Application Logic
- * Обновлено: Индивидуальное время ответа, UI в стиле Gemini, исправление настроек.
+ * Обновлено: Исправлен баг с очередностью реплик сценария.
  */
 
 // ==========================================
 // 1. Data Models & Storage
 // ==========================================
 const StorageAPI = {
-    // Теперь скрипт - это массив объектов {text: string, delay: number}
     DEFAULT_SCRIPT: [
         { text: "Анализ архитектуры завершен. Авторитативный сервер настроен корректно.", delay: 1.5 },
         { text: "Для оптимизации вычислений в Unity рекомендую перенести этот LINQ запрос в кэш. Garbage Collector может вызывать фризы.", delay: 3.0 },
@@ -21,7 +20,6 @@ const StorageAPI = {
             return JSON.parse(data);
         }
         
-        // Миграция старых строковых данных, если они есть
         const oldData = localStorage.getItem('ccg_script');
         if (oldData) {
             const parsed = JSON.parse(oldData);
@@ -38,7 +36,6 @@ const StorageAPI = {
         localStorage.setItem('ccg_script_v2', JSON.stringify(scriptArray));
     },
 
-    // ЧАТЫ
     getChats() {
         const data = localStorage.getItem('ccg_chats');
         return data ? JSON.parse(data) : [];
@@ -94,27 +91,22 @@ const StorageAPI = {
 // 2. AI Generator Service
 // ==========================================
 const AIService = {
-    async generateResponse(chatId) {
+    async generateResponse(chatId, currentIndex) {
         return new Promise((resolve) => {
             const script = StorageAPI.getScript();
-            const chat = StorageAPI.getChat(chatId);
             
-            if (!chat) return resolve({ text: "Ошибка контекста.", time: 0 });
-            if (script.length === 0) return resolve({ text: "База данных пуста.", time: 0 });
+            if (script.length === 0) return resolve({ text: "База данных пуста.", time: 0, newIndex: 0 });
 
-            let index = chat.scriptIndex || 0;
-            if (index >= script.length) index = 0;
+            let index = currentIndex || 0;
+            if (index >= script.length) index = 0; // Если сценарий закончился, начинаем заново
 
             const replica = script[index];
             const delaySeconds = parseFloat(replica.delay) || 1.0;
             const delayMs = delaySeconds * 1000;
-            
-            // Запоминаем следующий шаг
-            chat.scriptIndex = index + 1;
-            StorageAPI.updateChat(chat);
 
             setTimeout(() => {
-                resolve({ text: replica.text, time: delaySeconds });
+                // Возвращаем текст, время и СЛЕДУЮЩИЙ индекс для сохранения в UI
+                resolve({ text: replica.text, time: delaySeconds, newIndex: index + 1 });
             }, delayMs);
         });
     }
@@ -155,7 +147,6 @@ const UI = {
             newChatBtn: document.getElementById('newChatBtn'),
             chatList: document.getElementById('chatList'),
             
-            // Настройки
             settingsModal: document.getElementById('settingsModal'),
             settingsContent: document.getElementById('settingsContent'),
             openSettingsBtn: document.getElementById('openSettingsBtn'),
@@ -165,7 +156,6 @@ const UI = {
             replicasList: document.getElementById('replicasList'),
             deleteAllChatsBtn: document.getElementById('deleteAllChatsBtn'),
             
-            // Мобилка
             sidebar: document.getElementById('sidebar'),
             mobileMenuBtn: document.getElementById('mobileMenuBtn'),
             sidebarOverlay: document.getElementById('sidebarOverlay')
@@ -201,8 +191,6 @@ const UI = {
         this.dom.mobileMenuBtn.addEventListener('click', () => this.toggleMobileMenu(true));
         this.dom.sidebarOverlay.addEventListener('click', () => this.toggleMobileMenu(false));
     },
-
-    // --- Логика чата ---
 
     handleNewChat() {
         this.activeChat = StorageAPI.createChat();
@@ -270,24 +258,26 @@ const UI = {
         this.dom.messageInput.disabled = true;
         this.dom.sendBtn.classList.add('opacity-30');
 
-        // Пользователь (без аватара, Gemini-style)
+        // Пользователь
         this.activeChat.messages.push({ role: 'user', text });
         StorageAPI.updateChat(this.activeChat);
         this.renderSidebar();
         this.appendMessageDOM('user', text, null, true);
         this.scrollToBottom();
 
-        // Индикатор набора ИИ
         const typingId = this.showTypingIndicator();
         this.scrollToBottom();
 
-        // Генерация
-        const response = await AIService.generateResponse(this.activeChat.id);
+        // Генерация (передаем текущий индекс чата)
+        const response = await AIService.generateResponse(this.activeChat.id, this.activeChat.scriptIndex);
 
         this.removeTypingIndicator(typingId);
         
-        // Бот
+        // Обновляем индекс в объекте чата перед сохранением
+        this.activeChat.scriptIndex = response.newIndex;
         this.activeChat.messages.push({ role: 'bot', text: response.text, time: response.time });
+        
+        // Единое сохранение состояния
         StorageAPI.updateChat(this.activeChat);
         this.appendMessageDOM('bot', response.text, response.time, true);
 
@@ -309,7 +299,6 @@ const UI = {
                 </div>
             `;
         } else {
-            // AI Message (Gemini style: Icon on left, plain text block)
             const timeHTML = time ? `<div class="text-[11px] text-gray-500 mt-3 font-mono flex items-center gap-1.5"><i data-lucide="clock" class="w-3 h-3"></i> ${time} с</div>` : '';
             wrapper.innerHTML = `
                 <div class="flex items-start gap-4 max-w-[95%]">
@@ -373,11 +362,9 @@ const UI = {
         });
     },
 
-    // --- Настройки ---
-
     openSettings() {
         this.dom.settingsModal.classList.remove('hidden');
-        this.tempScript = JSON.parse(JSON.stringify(StorageAPI.getScript())); // Deep copy
+        this.tempScript = JSON.parse(JSON.stringify(StorageAPI.getScript()));
         this.renderSettingsScript();
         this.switchSettingsTab(document.querySelector('.tab-btn[data-target="tab-prompts"]'));
     },
@@ -460,8 +447,6 @@ const UI = {
             this.closeSettings();
         }
     },
-
-    // --- Утилиты ---
 
     toggleMobileMenu(show) {
         if (show) {
