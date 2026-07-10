@@ -1,89 +1,105 @@
 /**
- * Архитектура SPA симулятора чат-бота.
- * Логика UI, работы с хранилищем и имитации API строго разделены.
+ * CCG AI - Core Application Logic
  */
 
 // ==========================================
-// 1. Storage Manager (Управление данными)
+// 1. Data Models & Storage
 // ==========================================
 const StorageAPI = {
-    DEFAULT_REPLICAS: [
-        "Привет! Я готов к работе.",
-        "Это тестовая реплика номер два. Я игнорирую твой текст.",
-        "Архитектура клиент-сервер успешно симулирована.",
-        "Запрашиваю данные из локальной базы...",
-        "Все доступные реплики успешно воспроизведены. Начинаю заново!"
+    // Дефолтные реплики с уклоном в разработку игр (C#, Unity, Сервер)
+    DEFAULT_SCRIPT: [
+        "Анализ архитектуры завершен. Авторитативный сервер настроен корректно.",
+        "Для оптимизации вычислений в Unity рекомендую перенести этот LINQ запрос в кэш или использовать обычный цикл for. Garbage Collector может вызывать фризы.",
+        "Я сгенерировал C# сервис для потоковой передачи данных. Интеграция с ONNX Runtime прошла успешно.",
+        "Задержка предсказания клиента (Client Prediction) снижена на 14мс. Синхронизация работает стабильно.",
+        "Сборка проекта под целевую платформу выполнена без ошибок."
     ],
 
-    getReplicas() {
-        const data = localStorage.getItem('bot_replicas');
-        return data ? JSON.parse(data) : this.DEFAULT_REPLICAS;
+    getScript() {
+        const data = localStorage.getItem('ccg_script');
+        return data ? JSON.parse(data) : this.DEFAULT_SCRIPT;
     },
 
-    saveReplicas(replicasArray) {
-        localStorage.setItem('bot_replicas', JSON.stringify(replicasArray));
-        // При сохранении нового сценария сбрасываем индекс
-        localStorage.setItem('bot_replica_index', '0'); 
+    saveScript(scriptArray) {
+        localStorage.setItem('ccg_script', JSON.stringify(scriptArray));
     },
 
-    getCurrentIndex() {
-        return parseInt(localStorage.getItem('bot_replica_index')) || 0;
-    },
-
-    setCurrentIndex(index) {
-        localStorage.setItem('bot_replica_index', index.toString());
-    },
-    
-    getChatHistory() {
-        const data = localStorage.getItem('chat_history');
+    // Работа с чатами
+    getChats() {
+        const data = localStorage.getItem('ccg_chats');
         return data ? JSON.parse(data) : [];
     },
-    
-    saveChatHistory(history) {
-        localStorage.setItem('chat_history', JSON.stringify(history));
+
+    saveChats(chats) {
+        localStorage.setItem('ccg_chats', JSON.stringify(chats));
     },
 
-    clearChat() {
-        localStorage.removeItem('chat_history');
-        localStorage.setItem('bot_replica_index', '0');
+    getActiveChatId() {
+        return localStorage.getItem('ccg_active_chat');
+    },
+
+    setActiveChatId(id) {
+        if(id) localStorage.setItem('ccg_active_chat', id);
+        else localStorage.removeItem('ccg_active_chat');
+    },
+
+    createChat() {
+        const chats = this.getChats();
+        const newChat = {
+            id: 'chat_' + Date.now(),
+            title: 'Новый диалог',
+            messages: [],
+            scriptIndex: 0,
+            date: new Date().toISOString()
+        };
+        chats.unshift(newChat); // Добавляем в начало
+        this.saveChats(chats);
+        this.setActiveChatId(newChat.id);
+        return newChat;
+    },
+
+    getChat(id) {
+        return this.getChats().find(c => c.id === id);
+    },
+
+    updateChat(updatedChat) {
+        let chats = this.getChats();
+        const index = chats.findIndex(c => c.id === updatedChat.id);
+        if (index !== -1) {
+            chats[index] = updatedChat;
+            this.saveChats(chats);
+        }
+    },
+
+    deleteAllChats() {
+        localStorage.removeItem('ccg_chats');
+        localStorage.removeItem('ccg_active_chat');
     }
 };
 
 // ==========================================
-// 2. Chat Service (Имитация или реальное API)
+// 2. AI Generator Service
 // ==========================================
-const ChatService = {
-    /**
-     * Эта функция спроектирована для легкой замены в будущем.
-     * Чтобы подключить реальную модель (например, локальный ONNX Runtime 
-     * или внешний сервис Yandex LLM через C# бэкенд), просто замените 
-     * логику внутри на fetch-запрос:
-     * * const response = await fetch('http://localhost:5000/api/generate', {
-     * method: 'POST',
-     * body: JSON.stringify({ prompt: userMessage })
-     * });
-     * return await response.text();
-     */
-    async getBotResponse(userMessage) {
+const AIService = {
+    async generateResponse(chatId) {
         return new Promise((resolve) => {
-            // Имитация задержки обработки (1 - 2 секунды)
-            const delay = Math.floor(Math.random() * 1000) + 1000;
+            const delay = Math.floor(Math.random() * 800) + 800; // 0.8 - 1.6 сек
             
             setTimeout(() => {
-                const replicas = StorageAPI.getReplicas();
-                let currentIndex = StorageAPI.getCurrentIndex();
+                const script = StorageAPI.getScript();
+                const chat = StorageAPI.getChat(chatId);
+                
+                if (!chat) return resolve("Ошибка контекста.");
+                if (script.length === 0) return resolve("База данных пуста. Заполните базу в настройках.");
 
-                if (replicas.length === 0) {
-                    resolve("Доступные реплики успешно воспроизведены. Измените сценарий в настройках.");
-                    return;
-                }
+                let index = chat.scriptIndex || 0;
+                if (index >= script.length) index = 0;
 
-                if (currentIndex >= replicas.length) {
-                    currentIndex = 0; // Цикличное повторение
-                }
-
-                const reply = replicas[currentIndex];
-                StorageAPI.setCurrentIndex(currentIndex + 1);
+                const reply = script[index];
+                
+                // Обновляем индекс в чате
+                chat.scriptIndex = index + 1;
+                StorageAPI.updateChat(chat);
                 
                 resolve(reply);
             }, delay);
@@ -92,128 +108,217 @@ const ChatService = {
 };
 
 // ==========================================
-// 3. UI Controller (Отображение и события)
+// 3. UI Controller
 // ==========================================
 const UI = {
-    elements: {
-        chatContainer: document.getElementById('chatContainer'),
-        messageInput: document.getElementById('messageInput'),
-        sendBtn: document.getElementById('sendBtn'),
-        newChatBtn: document.getElementById('newChatBtn'),
-        
-        // Settings elements
-        settingsModal: document.getElementById('settingsModal'),
-        openSettingsBtn: document.getElementById('openSettingsBtn'),
-        closeSettingsBtn: document.getElementById('closeSettingsBtn'),
-        cancelSettingsBtn: document.getElementById('cancelSettingsBtn'),
-        saveSettingsBtn: document.getElementById('saveSettingsBtn'),
-        addReplicaBtn: document.getElementById('addReplicaBtn'),
-        replicasList: document.getElementById('replicasList'),
-        
-        // Mobile menu
-        sidebar: document.getElementById('sidebar'),
-        mobileMenuBtn: document.getElementById('mobileMenuBtn'),
-        sidebarOverlay: document.getElementById('sidebarOverlay')
-    },
-
-    tempReplicas: [], // Временное хранилище при открытых настройках
+    activeChat: null,
+    tempScript: [],
 
     init() {
+        this.cacheDOM();
         lucide.createIcons();
         this.bindEvents();
-        this.loadHistory();
+        
+        // Инициализация первого чата, если ничего нет
+        let chats = StorageAPI.getChats();
+        let activeId = StorageAPI.getActiveChatId();
+        
+        if (chats.length === 0) {
+            this.activeChat = StorageAPI.createChat();
+        } else {
+            this.activeChat = chats.find(c => c.id === activeId) || chats[0];
+            StorageAPI.setActiveChatId(this.activeChat.id);
+        }
+
+        this.renderSidebar();
+        this.renderChat();
         this.autoResizeTextarea();
+    },
+
+    cacheDOM() {
+        this.dom = {
+            chatContainer: document.getElementById('chatContainer'),
+            messageInput: document.getElementById('messageInput'),
+            sendBtn: document.getElementById('sendBtn'),
+            newChatBtn: document.getElementById('newChatBtn'),
+            chatList: document.getElementById('chatList'),
+            
+            // Settings
+            settingsModal: document.getElementById('settingsModal'),
+            settingsContent: document.getElementById('settingsContent'),
+            openSettingsBtn: document.getElementById('openSettingsBtn'),
+            saveSettingsBtn: document.getElementById('saveSettingsBtn'),
+            addReplicaBtn: document.getElementById('addReplicaBtn'),
+            clearAllReplicasBtn: document.getElementById('clearAllReplicasBtn'),
+            replicasList: document.getElementById('replicasList'),
+            deleteAllChatsBtn: document.getElementById('deleteAllChatsBtn'),
+            settingsFooter: document.getElementById('settingsFooter'),
+            
+            // Mobile
+            sidebar: document.getElementById('sidebar'),
+            mobileMenuBtn: document.getElementById('mobileMenuBtn'),
+            sidebarOverlay: document.getElementById('sidebarOverlay')
+        };
     },
 
     bindEvents() {
-        // Chat events
-        this.elements.sendBtn.addEventListener('click', () => this.handleSend());
-        this.elements.messageInput.addEventListener('keydown', (e) => {
+        // Окно ввода
+        this.dom.sendBtn.addEventListener('click', () => this.sendMessage());
+        this.dom.messageInput.addEventListener('keydown', (e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
-                this.handleSend();
+                this.sendMessage();
             }
         });
-        this.elements.messageInput.addEventListener('input', () => this.autoResizeTextarea());
-        this.elements.newChatBtn.addEventListener('click', () => this.startNewChat());
+        this.dom.messageInput.addEventListener('input', () => this.autoResizeTextarea());
+        
+        // Боковая панель
+        this.dom.newChatBtn.addEventListener('click', () => this.handleNewChat());
+        
+        // Настройки
+        this.dom.openSettingsBtn.addEventListener('click', () => this.openSettings());
+        document.querySelectorAll('.close-settings').forEach(btn => {
+            btn.addEventListener('click', () => this.closeSettings());
+        });
+        this.dom.saveSettingsBtn.addEventListener('click', () => this.saveSettings());
+        this.dom.addReplicaBtn.addEventListener('click', () => this.addReplicaInput());
+        this.dom.clearAllReplicasBtn.addEventListener('click', () => this.clearAllReplicas());
+        this.dom.deleteAllChatsBtn.addEventListener('click', () => this.deleteAllChats());
 
-        // Settings events
-        this.elements.openSettingsBtn.addEventListener('click', () => this.openSettings());
-        this.elements.closeSettingsBtn.addEventListener('click', () => this.closeSettings());
-        this.elements.cancelSettingsBtn.addEventListener('click', () => this.closeSettings());
-        this.elements.saveSettingsBtn.addEventListener('click', () => this.saveSettings());
-        this.elements.addReplicaBtn.addEventListener('click', () => this.addReplicaInput());
+        // Вкладки настроек
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => this.switchSettingsTab(e.currentTarget));
+        });
 
-        // Mobile menu events
-        this.elements.mobileMenuBtn.addEventListener('click', () => this.toggleMobileMenu());
-        this.elements.sidebarOverlay.addEventListener('click', () => this.toggleMobileMenu(false));
+        // Мобильное меню
+        this.dom.mobileMenuBtn.addEventListener('click', () => this.toggleMobileMenu(true));
+        this.dom.sidebarOverlay.addEventListener('click', () => this.toggleMobileMenu(false));
     },
 
-    autoResizeTextarea() {
-        const el = this.elements.messageInput;
-        el.style.height = 'auto';
-        el.style.height = (el.scrollHeight) + 'px';
-        this.elements.sendBtn.disabled = el.value.trim().length === 0;
+    // --- Core Chat Logic ---
+
+    handleNewChat() {
+        this.activeChat = StorageAPI.createChat();
+        this.renderSidebar();
+        this.renderChat();
+        if (window.innerWidth < 768) this.toggleMobileMenu(false);
+        this.dom.messageInput.focus();
     },
 
-    scrollToBottom() {
-        this.elements.chatContainer.scrollTop = this.elements.chatContainer.scrollHeight;
+    switchChat(id) {
+        if (this.activeChat.id === id) return;
+        this.activeChat = StorageAPI.getChat(id);
+        StorageAPI.setActiveChatId(id);
+        this.renderSidebar();
+        this.renderChat();
+        if (window.innerWidth < 768) this.toggleMobileMenu(false);
     },
 
-    // --- Обработка сообщений ---
+    renderSidebar() {
+        const chats = StorageAPI.getChats();
+        this.dom.chatList.innerHTML = '';
+        
+        chats.forEach(chat => {
+            const isActive = this.activeChat && this.activeChat.id === chat.id;
+            const btn = document.createElement('button');
+            btn.className = `w-full text-left truncate px-3 py-2.5 rounded-lg text-sm transition-all duration-200 ${
+                isActive 
+                ? 'bg-borderDark text-white font-medium shadow-sm' 
+                : 'text-gray-400 hover:bg-borderDark/50 hover:text-gray-200'
+            }`;
+            btn.textContent = chat.title;
+            btn.onclick = () => this.switchChat(chat.id);
+            this.dom.chatList.appendChild(btn);
+        });
+    },
 
-    async handleSend() {
-        const text = this.elements.messageInput.value.trim();
+    renderChat() {
+        this.dom.chatContainer.innerHTML = '';
+        
+        if (!this.activeChat || this.activeChat.messages.length === 0) {
+            // Экран пустого чата
+            this.dom.chatContainer.innerHTML = `
+                <div class="h-full flex flex-col items-center justify-center opacity-50 select-none">
+                    <div class="w-16 h-16 rounded-2xl bg-borderDark flex items-center justify-center mb-4">
+                        <i data-lucide="sparkles" class="w-8 h-8 text-accent"></i>
+                    </div>
+                    <h2 class="text-xl font-semibold text-white mb-2">Чем я могу помочь?</h2>
+                    <p class="text-sm text-gray-400">CCG AI готов к работе.</p>
+                </div>
+            `;
+            lucide.createIcons();
+            return;
+        }
+
+        this.activeChat.messages.forEach(msg => this.appendMessageDOM(msg.role, msg.text, false));
+        this.scrollToBottom();
+    },
+
+    async sendMessage() {
+        const text = this.dom.messageInput.value.trim();
         if (!text) return;
 
-        // Блокируем инпут
-        this.elements.messageInput.value = '';
+        // Если это первое сообщение в чате, обновляем заголовок
+        if (this.activeChat.messages.length === 0) {
+            this.activeChat.title = text.length > 25 ? text.substring(0, 25) + '...' : text;
+            this.dom.chatContainer.innerHTML = ''; // Убираем экран приветствия
+        }
+
+        // Блокировка UI
+        this.dom.messageInput.value = '';
         this.autoResizeTextarea();
-        this.elements.messageInput.disabled = true;
-        this.elements.sendBtn.disabled = true;
+        this.dom.messageInput.disabled = true;
+        this.dom.sendBtn.disabled = true;
 
-        // 1. Отображаем и сохраняем сообщение пользователя
-        this.appendMessage('user', text);
-        this.saveToHistory('user', text);
+        // Сохранение и рендер пользователя
+        this.activeChat.messages.push({ role: 'user', text });
+        StorageAPI.updateChat(this.activeChat);
+        this.renderSidebar(); // Обновляем название в сайдбаре
+        this.appendMessageDOM('user', text, true);
 
-        // 2. Показываем анимацию "Бот печатает..."
+        // Индикатор набора
         const typingId = this.showTypingIndicator();
         this.scrollToBottom();
 
-        // 3. Получаем ответ от Service Layer
-        const botReply = await ChatService.getBotResponse(text);
+        // Генерация ответа
+        const reply = await AIService.generateResponse(this.activeChat.id);
 
-        // 4. Убираем индикатор, показываем ответ и сохраняем
+        // Сохранение и рендер ИИ
         this.removeTypingIndicator(typingId);
-        this.appendMessage('bot', botReply);
-        this.saveToHistory('bot', botReply);
+        this.activeChat.messages.push({ role: 'bot', text: reply });
+        StorageAPI.updateChat(this.activeChat);
+        this.appendMessageDOM('bot', reply, true);
 
-        // Разблокируем инпут
-        this.elements.messageInput.disabled = false;
-        this.elements.messageInput.focus();
+        // Разблокировка UI
+        this.dom.messageInput.disabled = false;
+        this.dom.messageInput.focus();
         this.scrollToBottom();
     },
 
-    appendMessage(role, text) {
+    appendMessageDOM(role, text, animate) {
         const wrapper = document.createElement('div');
-        wrapper.className = `flex items-start gap-4 max-w-3xl mx-auto w-full ${role === 'user' ? 'flex-row-reverse' : ''}`;
+        const animClass = animate ? 'message-appear' : '';
+        wrapper.className = `flex items-start gap-4 max-w-3xl mx-auto w-full ${role === 'user' ? 'flex-row-reverse' : ''} ${animClass}`;
         
         const avatar = role === 'bot' 
-            ? `<div class="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center shrink-0"><i data-lucide="bot" class="w-5 h-5 text-white"></i></div>`
-            : `<div class="w-8 h-8 rounded-full bg-gray-600 flex items-center justify-center shrink-0"><i data-lucide="user" class="w-5 h-5 text-white"></i></div>`;
+            ? `<div class="w-8 h-8 rounded-full bg-gradient-to-br from-accent to-purple-600 flex items-center justify-center shrink-0 shadow-lg shadow-accent/20 border border-white/10"><i data-lucide="sparkles" class="w-4 h-4 text-white"></i></div>`
+            : `<div class="w-8 h-8 rounded-full bg-borderDark flex items-center justify-center shrink-0 border border-gray-700"><i data-lucide="user" class="w-4 h-4 text-gray-400"></i></div>`;
 
         const bubbleClass = role === 'bot' 
-            ? 'bg-gray-750 rounded-tl-none' 
-            : 'bg-blue-600 rounded-tr-none text-white';
+            ? 'text-gray-100 mt-1' 
+            : 'bg-panelDark border border-borderDark text-white px-5 py-3 rounded-2xl rounded-tr-sm shadow-sm';
 
         wrapper.innerHTML = `
             ${avatar}
-            <div class="flex-1 p-4 rounded-2xl ${bubbleClass}">
-                <p class="leading-relaxed break-words whitespace-pre-wrap">${this.escapeHTML(text)}</p>
+            <div class="flex-1 ${role === 'user' ? 'max-w-[80%]' : ''}">
+                ${role === 'bot' ? `<div class="font-semibold text-sm text-gray-300 mb-1 flex items-center gap-2">CCG AI <span class="text-[10px] bg-accent/20 text-accent px-1.5 py-0.5 rounded text-uppercase">PRO</span></div>` : ''}
+                <div class="${bubbleClass}">
+                    <p class="leading-relaxed break-words whitespace-pre-wrap text-[15px]">${this.escapeHTML(text)}</p>
+                </div>
             </div>
         `;
         
-        this.elements.chatContainer.appendChild(wrapper);
+        this.dom.chatContainer.appendChild(wrapper);
         lucide.createIcons({ root: wrapper });
     },
 
@@ -221,14 +326,15 @@ const UI = {
         const id = 'typing-' + Date.now();
         const wrapper = document.createElement('div');
         wrapper.id = id;
-        wrapper.className = "flex items-start gap-4 max-w-3xl mx-auto w-full";
+        wrapper.className = "flex items-start gap-4 max-w-3xl mx-auto w-full message-appear";
         
         wrapper.innerHTML = `
-            <div class="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center shrink-0">
-                <i data-lucide="bot" class="w-5 h-5 text-white"></i>
+            <div class="w-8 h-8 rounded-full bg-gradient-to-br from-accent to-purple-600 flex items-center justify-center shrink-0 border border-white/10">
+                <i data-lucide="sparkles" class="w-4 h-4 text-white"></i>
             </div>
-            <div class="bg-gray-750 p-2 rounded-2xl rounded-tl-none flex items-center h-12">
-                <div class="typing-indicator">
+            <div class="flex-1 mt-1">
+                <div class="font-semibold text-sm text-gray-300 mb-2">CCG AI</div>
+                <div class="typing-indicator px-1">
                     <div class="typing-dot"></div>
                     <div class="typing-dot"></div>
                     <div class="typing-dot"></div>
@@ -236,7 +342,7 @@ const UI = {
             </div>
         `;
         
-        this.elements.chatContainer.appendChild(wrapper);
+        this.dom.chatContainer.appendChild(wrapper);
         lucide.createIcons({ root: wrapper });
         return id;
     },
@@ -246,130 +352,137 @@ const UI = {
         if (el) el.remove();
     },
 
-    saveToHistory(role, text) {
-        const history = StorageAPI.getChatHistory();
-        history.push({ role, text });
-        StorageAPI.saveChatHistory(history);
+    autoResizeTextarea() {
+        const el = this.dom.messageInput;
+        el.style.height = 'auto';
+        el.style.height = (el.scrollHeight) + 'px';
+        this.dom.sendBtn.disabled = el.value.trim().length === 0;
     },
 
-    loadHistory() {
-        const history = StorageAPI.getChatHistory();
-        // Очищаем контейнер, оставляем только стартовое сообщение (или удаляем его)
-        const initialMsg = this.elements.chatContainer.firstElementChild;
-        this.elements.chatContainer.innerHTML = '';
-        if (initialMsg && history.length === 0) {
-            this.elements.chatContainer.appendChild(initialMsg);
-        }
-
-        history.forEach(msg => this.appendMessage(msg.role, msg.text));
-        this.scrollToBottom();
+    scrollToBottom() {
+        this.dom.chatContainer.scrollTo({
+            top: this.dom.chatContainer.scrollHeight,
+            behavior: 'smooth'
+        });
     },
 
-    startNewChat() {
-        StorageAPI.clearChat();
-        this.elements.chatContainer.innerHTML = `
-            <div class="flex items-start gap-4 max-w-3xl mx-auto w-full">
-                <div class="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center shrink-0">
-                    <i data-lucide="bot" class="w-5 h-5 text-white"></i>
-                </div>
-                <div class="flex-1 bg-gray-750 p-4 rounded-2xl rounded-tl-none">
-                    <p class="text-gray-100 leading-relaxed">Новая сессия начата. Я готов отвечать по сценарию.</p>
-                </div>
-            </div>
-        `;
-        lucide.createIcons();
-        if (window.innerWidth < 768) this.toggleMobileMenu(false);
-    },
-
-    // --- Логика Настроек (Реплики) ---
+    // --- Settings & Prompts Logic ---
 
     openSettings() {
-        this.tempReplicas = [...StorageAPI.getReplicas()];
-        this.renderReplicasSettings();
-        this.elements.settingsModal.classList.remove('hidden');
-        if (window.innerWidth < 768) this.toggleMobileMenu(false);
+        this.dom.settingsModal.classList.remove('hidden');
+        // Анимация появления
+        setTimeout(() => {
+            this.dom.settingsContent.classList.remove('scale-95', 'opacity-0');
+            this.dom.settingsContent.classList.add('scale-100', 'opacity-100');
+        }, 10);
+        
+        this.tempScript = [...StorageAPI.getScript()];
+        this.renderSettingsScript();
+        
+        // Открываем первую вкладку
+        this.switchSettingsTab(document.querySelector('.tab-btn[data-target="tab-general"]'));
     },
 
     closeSettings() {
-        this.elements.settingsModal.classList.add('hidden');
+        this.dom.settingsContent.classList.remove('scale-100', 'opacity-100');
+        this.dom.settingsContent.classList.add('scale-95', 'opacity-0');
+        setTimeout(() => {
+            this.dom.settingsModal.classList.add('hidden');
+        }, 300);
     },
 
-    saveSettings() {
-        // Собираем значения из инпутов
-        const inputs = this.elements.replicasList.querySelectorAll('input');
-        const newReplicas = Array.from(inputs).map(inp => inp.value.trim()).filter(v => v);
-        
-        StorageAPI.saveReplicas(newReplicas);
-        this.closeSettings();
-    },
-
-    renderReplicasSettings() {
-        this.elements.replicasList.innerHTML = '';
-        this.tempReplicas.forEach((text, index) => {
-            this.elements.replicasList.appendChild(this.createReplicaInput(text, index));
+    switchSettingsTab(btnNode) {
+        // Смена активного класса
+        document.querySelectorAll('.tab-btn').forEach(b => {
+            b.classList.remove('active', 'text-white');
+            b.classList.add('text-gray-400');
         });
-        lucide.createIcons({ root: this.elements.replicasList });
+        btnNode.classList.add('active', 'text-white');
+        btnNode.classList.remove('text-gray-400');
+
+        // Показ контента
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
+        const targetId = btnNode.getAttribute('data-target');
+        document.getElementById(targetId).classList.remove('hidden');
+
+        // Показывать кнопку сохранения только для Базы знаний
+        if (targetId === 'tab-prompts') {
+            this.dom.settingsFooter.classList.remove('hidden');
+        } else {
+            this.dom.settingsFooter.classList.add('hidden');
+        }
     },
 
-    createReplicaInput(text, index) {
+    renderSettingsScript() {
+        this.dom.replicasList.innerHTML = '';
+        this.tempScript.forEach((text, index) => {
+            this.dom.replicasList.appendChild(this.createReplicaInput(text));
+        });
+        lucide.createIcons({ root: this.dom.replicasList });
+    },
+
+    createReplicaInput(text) {
         const div = document.createElement('div');
-        div.className = "flex items-center gap-2 group";
-        
+        div.className = "flex gap-2 group items-start";
         div.innerHTML = `
-            <div class="cursor-move text-gray-500 group-hover:text-gray-300 transition-colors">
-                <i data-lucide="grip-vertical" class="w-4 h-4"></i>
-            </div>
-            <input type="text" value="${this.escapeHTML(text)}" 
-                class="flex-1 bg-gray-800 border border-gray-700 rounded-lg p-2.5 text-sm text-gray-100 focus:outline-none focus:border-blue-500 transition-colors placeholder-gray-500" 
-                placeholder="Текст реплики...">
-            <button class="text-gray-500 hover:text-red-400 p-2 transition-colors delete-replica-btn">
+            <textarea class="flex-1 bg-bgDark border border-borderDark rounded-xl p-3 text-sm text-gray-200 focus:outline-none focus:border-accent transition-colors resize-none h-20 custom-scrollbar" placeholder="Введите ответ ИИ...">${this.escapeHTML(text)}</textarea>
+            <button class="text-gray-500 hover:text-red-400 p-2 transition-colors shrink-0 delete-btn bg-bgDark border border-borderDark rounded-xl h-10 flex items-center justify-center">
                 <i data-lucide="trash-2" class="w-4 h-4"></i>
             </button>
         `;
-
-        div.querySelector('.delete-replica-btn').addEventListener('click', () => {
-            div.remove();
-        });
-
+        div.querySelector('.delete-btn').addEventListener('click', () => div.remove());
         return div;
     },
 
     addReplicaInput() {
-        const inputDiv = this.createReplicaInput("", this.tempReplicas.length);
-        this.elements.replicasList.appendChild(inputDiv);
-        lucide.createIcons({ root: inputDiv });
-        inputDiv.querySelector('input').focus();
+        const el = this.createReplicaInput("");
+        this.dom.replicasList.appendChild(el);
+        lucide.createIcons({ root: el });
+        el.querySelector('textarea').focus();
     },
 
-    // --- Утилиты ---
+    clearAllReplicas() {
+        if(confirm("Удалить все ответы из базы знаний?")) {
+            this.dom.replicasList.innerHTML = '';
+        }
+    },
 
-    toggleMobileMenu(forceState) {
-        const isOpen = !this.elements.sidebar.classList.contains('-translate-x-full');
-        const newState = forceState !== undefined ? forceState : !isOpen;
+    saveSettings() {
+        const textareas = this.dom.replicasList.querySelectorAll('textarea');
+        const newScript = Array.from(textareas).map(t => t.value.trim()).filter(v => v);
+        StorageAPI.saveScript(newScript);
+        this.closeSettings();
+    },
 
-        if (newState) {
-            this.elements.sidebar.classList.remove('-translate-x-full');
-            this.elements.sidebarOverlay.classList.remove('hidden');
+    deleteAllChats() {
+        if(confirm("Внимание! Это удалит всю историю диалогов. Продолжить?")) {
+            StorageAPI.deleteAllChats();
+            this.activeChat = StorageAPI.createChat();
+            this.renderSidebar();
+            this.renderChat();
+            this.closeSettings();
+        }
+    },
+
+    // --- Utils ---
+
+    toggleMobileMenu(show) {
+        if (show) {
+            this.dom.sidebar.classList.remove('-translate-x-full');
+            this.dom.sidebarOverlay.classList.remove('hidden');
         } else {
-            this.elements.sidebar.classList.add('-translate-x-full');
-            this.elements.sidebarOverlay.classList.add('hidden');
+            this.dom.sidebar.classList.add('-translate-x-full');
+            this.dom.sidebarOverlay.classList.add('hidden');
         }
     },
 
     escapeHTML(str) {
         return str.replace(/[&<>'"]/g, 
-            tag => ({
-                '&': '&amp;',
-                '<': '&lt;',
-                '>': '&gt;',
-                "'": '&#39;',
-                '"': '&quot;'
-            }[tag] || tag)
+            tag => ({'&': '&amp;','<': '&lt;','>': '&gt;',"'": '&#39;','"': '&quot;'}[tag] || tag)
         );
     }
 };
 
-// Запуск приложения при загрузке DOM
 document.addEventListener('DOMContentLoaded', () => {
     UI.init();
 });

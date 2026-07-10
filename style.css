@@ -1,28 +1,47 @@
-/* Custom Scrollbar for dark theme */
+/* Custom Scrollbar */
 .custom-scrollbar::-webkit-scrollbar {
-    width: 6px;
+    width: 5px;
+    height: 5px;
 }
 .custom-scrollbar::-webkit-scrollbar-track {
     background: transparent;
 }
 .custom-scrollbar::-webkit-scrollbar-thumb {
-    background-color: #4b5563; /* Tailwind gray-600 */
-    border-radius: 20px;
+    background-color: #3f3f46; /* Zinc 700 */
+    border-radius: 10px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background-color: #52525b; /* Zinc 600 */
 }
 
-/* Typing Indicator Animation */
+/* Animations */
+@keyframes slideUpFade {
+    from {
+        opacity: 0;
+        transform: translateY(12px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.message-appear {
+    animation: slideUpFade 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Typing Indicator */
 .typing-indicator {
     display: flex;
     align-items: center;
     gap: 4px;
-    padding: 8px 12px;
-    height: 100%;
+    padding: 2px 0;
 }
 
 .typing-dot {
-    width: 6px;
-    height: 6px;
-    background-color: #9ca3af; /* Tailwind gray-400 */
+    width: 5px;
+    height: 5px;
+    background-color: #a1a1aa; /* Zinc 400 */
     border-radius: 50%;
     animation: typing 1.4s infinite ease-in-out both;
 }
@@ -31,6 +50,12 @@
 .typing-dot:nth-child(2) { animation-delay: -0.16s; }
 
 @keyframes typing {
-    0%, 80%, 100% { transform: scale(0); opacity: 0.5; }
+    0%, 80%, 100% { transform: scale(0); opacity: 0.3; }
     40% { transform: scale(1); opacity: 1; }
+}
+
+/* Tab active state for settings */
+.tab-btn.active {
+    background-color: #27272a; /* borderDark */
+    color: white;
 }

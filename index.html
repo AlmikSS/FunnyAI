@@ -3,112 +3,198 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Simulator SPA</title>
+    <title>CCG AI</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <link rel="stylesheet" href="style.css">
     <script>
         tailwind.config = {
+            darkMode: 'class',
             theme: {
                 extend: {
                     colors: {
-                        gray: { 750: '#2d3748', 850: '#1a202c', 950: '#0d1117' }
+                        bgDark: '#09090b', // Zinc 950
+                        panelDark: '#18181b', // Zinc 900
+                        borderDark: '#27272a', // Zinc 800
+                        accent: '#6366f1', // Indigo 500
+                        accentHover: '#4f46e5', // Indigo 600
+                    },
+                    animation: {
+                        'fade-in-up': 'slideUpFade 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+                        'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
                     }
                 }
             }
         }
     </script>
 </head>
-<body class="bg-gray-800 text-gray-100 h-screen flex overflow-hidden font-sans">
+<body class="bg-bgDark text-gray-200 h-screen flex overflow-hidden font-sans antialiased selection:bg-accent selection:text-white">
 
-    <div class="md:hidden absolute top-0 left-0 w-full h-14 bg-gray-900 border-b border-gray-700 flex items-center justify-between px-4 z-20">
-        <button id="mobileMenuBtn" class="text-gray-300 hover:text-white">
+    <div class="md:hidden absolute top-0 left-0 w-full h-14 bg-bgDark/80 backdrop-blur-md border-b border-borderDark flex items-center justify-between px-4 z-20">
+        <button id="mobileMenuBtn" class="text-gray-400 hover:text-white transition-colors">
             <i data-lucide="menu"></i>
         </button>
-        <span class="font-semibold tracking-wide">AI Simulator</span>
-        <div class="w-6"></div> </div>
+        <div class="flex items-center gap-2">
+            <i data-lucide="sparkles" class="w-4 h-4 text-accent"></i>
+            <span class="font-bold tracking-wide text-white">CCG AI</span>
+        </div>
+        <div class="w-6"></div>
+    </div>
 
-    <div id="sidebarOverlay" class="fixed inset-0 bg-black/50 z-20 hidden md:hidden"></div>
+    <div id="sidebarOverlay" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-20 hidden md:hidden transition-opacity"></div>
 
-    <aside id="sidebar" class="fixed md:static inset-y-0 left-0 transform -translate-x-full md:translate-x-0 transition-transform duration-300 w-72 bg-gray-950 flex flex-col z-30 border-r border-gray-800">
-        <div class="p-4 flex-1 flex flex-col gap-4 overflow-y-auto custom-scrollbar">
-            <button id="newChatBtn" class="flex items-center gap-3 w-full bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-lg p-3 transition-colors text-sm font-medium">
-                <i data-lucide="plus" class="w-5 h-5"></i>
-                Новый чат
+    <aside id="sidebar" class="fixed md:static inset-y-0 left-0 transform -translate-x-full md:translate-x-0 transition-transform duration-300 w-72 bg-panelDark flex flex-col z-30 border-r border-borderDark">
+        <div class="p-4">
+            <button id="newChatBtn" class="group flex items-center justify-between w-full bg-transparent hover:bg-borderDark border border-borderDark rounded-xl p-3 transition-all duration-200">
+                <div class="flex items-center gap-3">
+                    <div class="bg-bgDark p-1.5 rounded-lg group-hover:text-accent transition-colors">
+                        <i data-lucide="plus" class="w-4 h-4"></i>
+                    </div>
+                    <span class="text-sm font-medium text-gray-100">Новый чат</span>
+                </div>
+                <i data-lucide="square-pen" class="w-4 h-4 text-gray-500 opacity-0 group-hover:opacity-100 transition-opacity"></i>
             </button>
-            
-            <div class="flex flex-col gap-2 mt-4">
-                <span class="text-xs text-gray-500 font-semibold px-2">ИСТОРИЯ (Демо)</span>
-                <button class="text-left truncate px-3 py-2 rounded-md bg-gray-800 text-gray-300 text-sm">Сценарий: Тест производительности</button>
-                <button class="text-left truncate px-3 py-2 rounded-md hover:bg-gray-800 text-gray-400 text-sm transition-colors">Анализ архитектуры C#</button>
-            </div>
         </div>
 
-        <div class="p-4 border-t border-gray-800">
-            <button id="openSettingsBtn" class="flex items-center gap-3 w-full hover:bg-gray-800 rounded-lg p-3 transition-colors text-sm font-medium text-gray-300">
-                <i data-lucide="settings" class="w-5 h-5"></i>
+        <div class="flex-1 overflow-y-auto custom-scrollbar px-3 pb-4">
+            <div class="text-xs font-semibold text-gray-500 mb-3 px-2 mt-2 tracking-wider">ЧАТЫ</div>
+            <div id="chatList" class="flex flex-col gap-1">
+                </div>
+        </div>
+
+        <div class="p-4 border-t border-borderDark bg-panelDark">
+            <button id="openSettingsBtn" class="flex items-center gap-3 w-full hover:bg-borderDark rounded-xl p-3 transition-colors text-sm font-medium text-gray-300 hover:text-white">
+                <i data-lucide="settings-2" class="w-5 h-5 text-gray-400"></i>
                 Настройки
             </button>
+            <div class="mt-4 flex items-center gap-3 px-3">
+                <div class="w-8 h-8 rounded-full bg-gradient-to-tr from-accent to-purple-600 flex items-center justify-center shadow-lg shadow-accent/20">
+                    <span class="text-xs font-bold text-white">Dev</span>
+                </div>
+                <div class="flex flex-col">
+                    <span class="text-sm font-medium text-white">CCG Team</span>
+                    <span class="text-xs text-gray-500">PRO Аккаунт</span>
+                </div>
+            </div>
         </div>
     </aside>
 
-    <main class="flex-1 flex flex-col h-full relative pt-14 md:pt-0">
+    <main class="flex-1 flex flex-col h-full relative pt-14 md:pt-0 bg-bgDark bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(99,102,241,0.05),rgba(255,255,255,0))]">
         
-        <div id="chatContainer" class="flex-1 overflow-y-auto p-4 md:p-8 space-y-6 custom-scrollbar pb-32">
-            <div class="flex items-start gap-4 max-w-3xl mx-auto">
-                <div class="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center shrink-0">
-                    <i data-lucide="bot" class="w-5 h-5 text-white"></i>
-                </div>
-                <div class="flex-1 bg-gray-750 p-4 rounded-2xl rounded-tl-none">
-                    <p class="text-gray-100 leading-relaxed">Привет! Я симулятор ИИ. Введите сообщение, и я отвечу по заранее заданному сценарию.</p>
-                </div>
+        <div class="hidden md:flex absolute top-0 left-0 w-full p-4 items-center justify-center z-10 pointer-events-none">
+            <div class="bg-panelDark/50 backdrop-blur-md border border-borderDark rounded-full px-4 py-1.5 flex items-center gap-2 shadow-sm pointer-events-auto">
+                <span class="text-xs font-medium text-gray-400">Модель:</span>
+                <span class="text-xs font-bold text-white flex items-center gap-1">
+                    CCG-Pro <i data-lucide="zap" class="w-3 h-3 text-accent"></i>
+                </span>
             </div>
         </div>
 
-        <div class="absolute bottom-0 left-0 w-full bg-gradient-to-t from-gray-800 via-gray-800 to-transparent p-4">
-            <div class="max-w-3xl mx-auto relative flex items-end bg-gray-750 border border-gray-600 rounded-2xl shadow-xl focus-within:border-blue-500 transition-colors">
-                <textarea id="messageInput" rows="1" class="w-full bg-transparent text-gray-100 placeholder-gray-400 p-4 max-h-48 outline-none resize-none custom-scrollbar" placeholder="Написать сообщение..."></textarea>
-                <button id="sendBtn" class="p-2 mb-2 mr-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-                    <i data-lucide="send" class="w-5 h-5"></i>
-                </button>
+        <div id="chatContainer" class="flex-1 overflow-y-auto p-4 md:p-8 space-y-8 custom-scrollbar pb-40">
             </div>
-            <div class="text-center text-xs text-gray-500 mt-3">
-                Симулятор использует локальное хранилище для сценариев.
+
+        <div class="absolute bottom-0 left-0 w-full bg-gradient-to-t from-bgDark via-bgDark to-transparent pt-10 pb-6 px-4 md:px-8">
+            <div class="max-w-4xl mx-auto relative group">
+                <div class="absolute -inset-0.5 bg-gradient-to-r from-accent to-purple-600 rounded-2xl blur opacity-20 group-focus-within:opacity-40 transition duration-500"></div>
+                <div class="relative flex items-end bg-panelDark border border-borderDark rounded-2xl shadow-2xl transition-colors">
+                    <textarea id="messageInput" rows="1" class="w-full bg-transparent text-gray-100 placeholder-gray-500 p-4 pl-5 max-h-48 outline-none resize-none custom-scrollbar" placeholder="Отправьте сообщение CCG AI..."></textarea>
+                    <button id="sendBtn" class="p-2.5 mb-2 mr-2 bg-white text-black hover:bg-gray-200 rounded-xl transition-all disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center">
+                        <i data-lucide="arrow-up" class="w-5 h-5"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="text-center text-xs text-gray-500 mt-3 font-medium">
+                CCG AI может допускать ошибки. Проверяйте код и данные перед интеграцией.
             </div>
         </div>
     </main>
 
-    <div id="settingsModal" class="fixed inset-0 bg-black/60 z-50 hidden flex items-center justify-center backdrop-blur-sm">
-        <div class="bg-gray-900 w-full max-w-2xl rounded-2xl shadow-2xl border border-gray-700 flex flex-col max-h-[90vh]">
-            <div class="flex items-center justify-between p-5 border-b border-gray-800">
-                <h2 class="text-xl font-semibold">Настройки</h2>
-                <button id="closeSettingsBtn" class="text-gray-400 hover:text-white transition-colors">
-                    <i data-lucide="x" class="w-6 h-6"></i>
-                </button>
+    <div id="settingsModal" class="fixed inset-0 bg-black/80 z-50 hidden flex items-center justify-center backdrop-blur-sm transition-opacity">
+        <div class="bg-panelDark w-full max-w-4xl rounded-2xl shadow-2xl border border-borderDark flex flex-col md:flex-row h-[85vh] md:h-[70vh] overflow-hidden transform scale-95 opacity-0 transition-all duration-300" id="settingsContent">
+            
+            <div class="w-full md:w-64 bg-bgDark border-r border-borderDark flex flex-col">
+                <div class="p-5 border-b border-borderDark md:hidden flex justify-between items-center">
+                    <h2 class="font-semibold text-white">Настройки</h2>
+                    <button class="close-settings text-gray-400 hover:text-white"><i data-lucide="x"></i></button>
+                </div>
+                <div class="p-3 flex gap-2 md:flex-col overflow-x-auto md:overflow-x-visible custom-scrollbar">
+                    <button class="tab-btn active w-full text-left px-4 py-2.5 rounded-lg text-sm font-medium transition-colors whitespace-nowrap" data-target="tab-general">Общие</button>
+                    <button class="tab-btn w-full text-left px-4 py-2.5 rounded-lg text-sm font-medium transition-colors whitespace-nowrap text-gray-400 hover:bg-borderDark" data-target="tab-model">Модель ИИ</button>
+                    <button class="tab-btn w-full text-left px-4 py-2.5 rounded-lg text-sm font-medium transition-colors whitespace-nowrap text-gray-400 hover:bg-borderDark" data-target="tab-prompts">База знаний</button>
+                </div>
             </div>
             
-            <div class="flex flex-1 overflow-hidden">
-                <div class="w-1/3 border-r border-gray-800 p-3 flex flex-col gap-2 bg-gray-950/50">
-                    <button class="text-left px-4 py-2 rounded-lg text-sm text-gray-400 hover:bg-gray-800 transition-colors">Профиль</button>
-                    <button class="text-left px-4 py-2 rounded-lg text-sm bg-gray-800 text-white font-medium shadow-sm">Реплики сценария</button>
-                </div>
-                
-                <div class="w-2/3 p-6 overflow-y-auto custom-scrollbar flex flex-col">
-                    <h3 class="text-lg font-medium mb-4">Настройка реплик ИИ</h3>
-                    <p class="text-sm text-gray-400 mb-4">Бот будет отвечать этими фразами строго по порядку. Когда фразы закончатся, сценарий пойдет по кругу.</p>
-                    
-                    <div id="replicasList" class="flex flex-col gap-3 flex-1 mb-4">
-                        </div>
-                    
-                    <button id="addReplicaBtn" class="flex items-center justify-center gap-2 w-full border border-dashed border-gray-600 text-gray-400 hover:text-white hover:border-gray-400 rounded-lg p-3 transition-colors mb-6 text-sm">
-                        <i data-lucide="plus" class="w-4 h-4"></i>
-                        Добавить реплику
+            <div class="flex-1 flex flex-col relative bg-panelDark">
+                <div class="hidden md:flex absolute top-4 right-4 z-10">
+                    <button class="close-settings text-gray-400 hover:text-white transition-colors bg-bgDark/50 p-2 rounded-lg backdrop-blur-sm">
+                        <i data-lucide="x" class="w-5 h-5"></i>
                     </button>
+                </div>
+
+                <div class="flex-1 overflow-y-auto custom-scrollbar p-6">
                     
-                    <div class="flex justify-end gap-3 mt-auto pt-4 border-t border-gray-800">
-                        <button id="cancelSettingsBtn" class="px-4 py-2 rounded-lg text-sm font-medium text-gray-300 hover:bg-gray-800 transition-colors">Отмена</button>
-                        <button id="saveSettingsBtn" class="px-4 py-2 rounded-lg text-sm font-medium bg-blue-600 hover:bg-blue-700 text-white transition-colors">Сохранить</button>
+                    <div id="tab-general" class="tab-content">
+                        <h3 class="text-xl font-semibold text-white mb-6">Общие настройки</h3>
+                        <div class="space-y-4">
+                            <div class="flex items-center justify-between p-4 bg-bgDark border border-borderDark rounded-xl">
+                                <div>
+                                    <div class="text-sm font-medium text-white">Темная тема</div>
+                                    <div class="text-xs text-gray-500">Включена по умолчанию</div>
+                                </div>
+                                <div class="w-10 h-6 bg-accent rounded-full relative cursor-not-allowed opacity-80">
+                                    <div class="absolute right-1 top-1 w-4 h-4 bg-white rounded-full"></div>
+                                </div>
+                            </div>
+                            <div class="flex items-center justify-between p-4 bg-bgDark border border-borderDark rounded-xl">
+                                <div>
+                                    <div class="text-sm font-medium text-white">Удалить все чаты</div>
+                                    <div class="text-xs text-gray-500">Очистить историю на этом устройстве</div>
+                                </div>
+                                <button id="deleteAllChatsBtn" class="px-3 py-1.5 bg-red-500/10 text-red-500 border border-red-500/20 rounded-lg text-sm hover:bg-red-500/20 transition-colors">Удалить</button>
+                            </div>
+                        </div>
                     </div>
+
+                    <div id="tab-model" class="tab-content hidden">
+                        <h3 class="text-xl font-semibold text-white mb-6">Настройки генерации</h3>
+                        <div class="space-y-4">
+                            <div class="p-4 bg-bgDark border border-borderDark rounded-xl">
+                                <label class="text-sm font-medium text-white block mb-2">Активная модель</label>
+                                <select class="w-full bg-panelDark border border-borderDark text-white text-sm rounded-lg focus:ring-accent focus:border-accent block p-2.5 outline-none">
+                                    <option>CCG-Pro (Рекомендуется)</option>
+                                    <option>CCG-Lite (Быстрая)</option>
+                                    <option>CCG-Vision (Анализ изображений)</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="tab-prompts" class="tab-content hidden h-full flex flex-col">
+                        <div class="flex justify-between items-center mb-6">
+                            <div>
+                                <h3 class="text-xl font-semibold text-white">База ответов</h3>
+                                <p class="text-xs text-gray-400 mt-1">ИИ будет использовать эти данные для генерации.</p>
+                            </div>
+                            <button id="clearAllReplicasBtn" class="flex items-center gap-2 px-3 py-1.5 text-red-400 hover:text-red-300 hover:bg-red-400/10 rounded-lg transition-colors text-sm font-medium">
+                                <i data-lucide="trash" class="w-4 h-4"></i>
+                                Очистить всё
+                            </button>
+                        </div>
+                        
+                        <div id="replicasList" class="flex flex-col gap-3 flex-1 overflow-y-auto custom-scrollbar pb-4">
+                            </div>
+                        
+                        <button id="addReplicaBtn" class="mt-2 flex items-center justify-center gap-2 w-full border border-dashed border-borderDark text-gray-400 hover:text-white hover:border-gray-500 hover:bg-borderDark/30 rounded-xl p-3 transition-colors text-sm font-medium">
+                            <i data-lucide="plus" class="w-4 h-4"></i>
+                            Добавить правило
+                        </button>
+                    </div>
+
+                </div>
+
+                <div class="p-4 border-t border-borderDark bg-panelDark flex justify-end gap-3 hidden" id="settingsFooter">
+                    <button class="close-settings px-4 py-2 rounded-lg text-sm font-medium text-gray-400 hover:text-white hover:bg-borderDark transition-colors">Отмена</button>
+                    <button id="saveSettingsBtn" class="px-5 py-2 rounded-lg text-sm font-medium bg-accent hover:bg-accentHover text-white shadow-lg shadow-accent/20 transition-all">Сохранить базу</button>
                 </div>
             </div>
         </div>
