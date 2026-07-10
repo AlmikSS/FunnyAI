@@ -1,30 +1,44 @@
 /**
  * CCG AI - Core Application Logic
+ * Обновлено: Индивидуальное время ответа, UI в стиле Gemini, исправление настроек.
  */
 
 // ==========================================
 // 1. Data Models & Storage
 // ==========================================
 const StorageAPI = {
-    // Дефолтные реплики с уклоном в разработку игр (C#, Unity, Сервер)
+    // Теперь скрипт - это массив объектов {text: string, delay: number}
     DEFAULT_SCRIPT: [
-        "Анализ архитектуры завершен. Авторитативный сервер настроен корректно.",
-        "Для оптимизации вычислений в Unity рекомендую перенести этот LINQ запрос в кэш или использовать обычный цикл for. Garbage Collector может вызывать фризы.",
-        "Я сгенерировал C# сервис для потоковой передачи данных. Интеграция с ONNX Runtime прошла успешно.",
-        "Задержка предсказания клиента (Client Prediction) снижена на 14мс. Синхронизация работает стабильно.",
-        "Сборка проекта под целевую платформу выполнена без ошибок."
+        { text: "Анализ архитектуры завершен. Авторитативный сервер настроен корректно.", delay: 1.5 },
+        { text: "Для оптимизации вычислений в Unity рекомендую перенести этот LINQ запрос в кэш. Garbage Collector может вызывать фризы.", delay: 3.0 },
+        { text: "Сгенерировал C# сервис для потоковой передачи. Интеграция с ONNX Runtime успешна.", delay: 2.2 },
+        { text: "Задержка предсказания клиента (Client Prediction) снижена на 14мс.", delay: 1.8 }
     ],
 
     getScript() {
-        const data = localStorage.getItem('ccg_script');
-        return data ? JSON.parse(data) : this.DEFAULT_SCRIPT;
+        const data = localStorage.getItem('ccg_script_v2');
+        if (data) {
+            return JSON.parse(data);
+        }
+        
+        // Миграция старых строковых данных, если они есть
+        const oldData = localStorage.getItem('ccg_script');
+        if (oldData) {
+            const parsed = JSON.parse(oldData);
+            if (typeof parsed[0] === 'string') {
+                const migrated = parsed.map(text => ({ text, delay: 1.5 }));
+                this.saveScript(migrated);
+                return migrated;
+            }
+        }
+        return this.DEFAULT_SCRIPT;
     },
 
     saveScript(scriptArray) {
-        localStorage.setItem('ccg_script', JSON.stringify(scriptArray));
+        localStorage.setItem('ccg_script_v2', JSON.stringify(scriptArray));
     },
 
-    // Работа с чатами
+    // ЧАТЫ
     getChats() {
         const data = localStorage.getItem('ccg_chats');
         return data ? JSON.parse(data) : [];
@@ -47,12 +61,11 @@ const StorageAPI = {
         const chats = this.getChats();
         const newChat = {
             id: 'chat_' + Date.now(),
-            title: 'Новый диалог',
+            title: 'Новый чат',
             messages: [],
-            scriptIndex: 0,
-            date: new Date().toISOString()
+            scriptIndex: 0
         };
-        chats.unshift(newChat); // Добавляем в начало
+        chats.unshift(newChat);
         this.saveChats(chats);
         this.setActiveChatId(newChat.id);
         return newChat;
@@ -83,26 +96,26 @@ const StorageAPI = {
 const AIService = {
     async generateResponse(chatId) {
         return new Promise((resolve) => {
-            const delay = Math.floor(Math.random() * 800) + 800; // 0.8 - 1.6 сек
+            const script = StorageAPI.getScript();
+            const chat = StorageAPI.getChat(chatId);
             
+            if (!chat) return resolve({ text: "Ошибка контекста.", time: 0 });
+            if (script.length === 0) return resolve({ text: "База данных пуста.", time: 0 });
+
+            let index = chat.scriptIndex || 0;
+            if (index >= script.length) index = 0;
+
+            const replica = script[index];
+            const delaySeconds = parseFloat(replica.delay) || 1.0;
+            const delayMs = delaySeconds * 1000;
+            
+            // Запоминаем следующий шаг
+            chat.scriptIndex = index + 1;
+            StorageAPI.updateChat(chat);
+
             setTimeout(() => {
-                const script = StorageAPI.getScript();
-                const chat = StorageAPI.getChat(chatId);
-                
-                if (!chat) return resolve("Ошибка контекста.");
-                if (script.length === 0) return resolve("База данных пуста. Заполните базу в настройках.");
-
-                let index = chat.scriptIndex || 0;
-                if (index >= script.length) index = 0;
-
-                const reply = script[index];
-                
-                // Обновляем индекс в чате
-                chat.scriptIndex = index + 1;
-                StorageAPI.updateChat(chat);
-                
-                resolve(reply);
-            }, delay);
+                resolve({ text: replica.text, time: delaySeconds });
+            }, delayMs);
         });
     }
 };
@@ -119,7 +132,6 @@ const UI = {
         lucide.createIcons();
         this.bindEvents();
         
-        // Инициализация первого чата, если ничего нет
         let chats = StorageAPI.getChats();
         let activeId = StorageAPI.getActiveChatId();
         
@@ -143,7 +155,7 @@ const UI = {
             newChatBtn: document.getElementById('newChatBtn'),
             chatList: document.getElementById('chatList'),
             
-            // Settings
+            // Настройки
             settingsModal: document.getElementById('settingsModal'),
             settingsContent: document.getElementById('settingsContent'),
             openSettingsBtn: document.getElementById('openSettingsBtn'),
@@ -152,9 +164,8 @@ const UI = {
             clearAllReplicasBtn: document.getElementById('clearAllReplicasBtn'),
             replicasList: document.getElementById('replicasList'),
             deleteAllChatsBtn: document.getElementById('deleteAllChatsBtn'),
-            settingsFooter: document.getElementById('settingsFooter'),
             
-            // Mobile
+            // Мобилка
             sidebar: document.getElementById('sidebar'),
             mobileMenuBtn: document.getElementById('mobileMenuBtn'),
             sidebarOverlay: document.getElementById('sidebarOverlay')
@@ -162,7 +173,6 @@ const UI = {
     },
 
     bindEvents() {
-        // Окно ввода
         this.dom.sendBtn.addEventListener('click', () => this.sendMessage());
         this.dom.messageInput.addEventListener('keydown', (e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
@@ -172,30 +182,27 @@ const UI = {
         });
         this.dom.messageInput.addEventListener('input', () => this.autoResizeTextarea());
         
-        // Боковая панель
         this.dom.newChatBtn.addEventListener('click', () => this.handleNewChat());
         
-        // Настройки
         this.dom.openSettingsBtn.addEventListener('click', () => this.openSettings());
         document.querySelectorAll('.close-settings').forEach(btn => {
             btn.addEventListener('click', () => this.closeSettings());
         });
+        
         this.dom.saveSettingsBtn.addEventListener('click', () => this.saveSettings());
         this.dom.addReplicaBtn.addEventListener('click', () => this.addReplicaInput());
         this.dom.clearAllReplicasBtn.addEventListener('click', () => this.clearAllReplicas());
         this.dom.deleteAllChatsBtn.addEventListener('click', () => this.deleteAllChats());
 
-        // Вкладки настроек
         document.querySelectorAll('.tab-btn').forEach(btn => {
             btn.addEventListener('click', (e) => this.switchSettingsTab(e.currentTarget));
         });
 
-        // Мобильное меню
         this.dom.mobileMenuBtn.addEventListener('click', () => this.toggleMobileMenu(true));
         this.dom.sidebarOverlay.addEventListener('click', () => this.toggleMobileMenu(false));
     },
 
-    // --- Core Chat Logic ---
+    // --- Логика чата ---
 
     handleNewChat() {
         this.activeChat = StorageAPI.createChat();
@@ -221,10 +228,10 @@ const UI = {
         chats.forEach(chat => {
             const isActive = this.activeChat && this.activeChat.id === chat.id;
             const btn = document.createElement('button');
-            btn.className = `w-full text-left truncate px-3 py-2.5 rounded-lg text-sm transition-all duration-200 ${
+            btn.className = `w-full text-left truncate px-4 py-3 rounded-full text-sm transition-all duration-200 ${
                 isActive 
-                ? 'bg-borderDark text-white font-medium shadow-sm' 
-                : 'text-gray-400 hover:bg-borderDark/50 hover:text-gray-200'
+                ? 'bg-accent/10 text-accent font-medium' 
+                : 'text-gray-300 hover:bg-borderDark'
             }`;
             btn.textContent = chat.title;
             btn.onclick = () => this.switchChat(chat.id);
@@ -236,21 +243,16 @@ const UI = {
         this.dom.chatContainer.innerHTML = '';
         
         if (!this.activeChat || this.activeChat.messages.length === 0) {
-            // Экран пустого чата
             this.dom.chatContainer.innerHTML = `
-                <div class="h-full flex flex-col items-center justify-center opacity-50 select-none">
-                    <div class="w-16 h-16 rounded-2xl bg-borderDark flex items-center justify-center mb-4">
-                        <i data-lucide="sparkles" class="w-8 h-8 text-accent"></i>
-                    </div>
-                    <h2 class="text-xl font-semibold text-white mb-2">Чем я могу помочь?</h2>
-                    <p class="text-sm text-gray-400">CCG AI готов к работе.</p>
+                <div class="h-full flex flex-col items-center justify-center select-none opacity-80 mt-10">
+                    <h2 class="text-3xl font-medium mb-2 bg-gradient-to-r from-accent to-purple-400 bg-clip-text text-transparent">Привет!</h2>
+                    <p class="text-gray-400">Введи любой текст для начала симуляции.</p>
                 </div>
             `;
-            lucide.createIcons();
             return;
         }
 
-        this.activeChat.messages.forEach(msg => this.appendMessageDOM(msg.role, msg.text, false));
+        this.activeChat.messages.forEach(msg => this.appendMessageDOM(msg.role, msg.text, msg.time, false));
         this.scrollToBottom();
     },
 
@@ -258,65 +260,69 @@ const UI = {
         const text = this.dom.messageInput.value.trim();
         if (!text) return;
 
-        // Если это первое сообщение в чате, обновляем заголовок
         if (this.activeChat.messages.length === 0) {
-            this.activeChat.title = text.length > 25 ? text.substring(0, 25) + '...' : text;
-            this.dom.chatContainer.innerHTML = ''; // Убираем экран приветствия
+            this.activeChat.title = text.length > 30 ? text.substring(0, 30) + '...' : text;
+            this.dom.chatContainer.innerHTML = ''; 
         }
 
-        // Блокировка UI
         this.dom.messageInput.value = '';
         this.autoResizeTextarea();
         this.dom.messageInput.disabled = true;
-        this.dom.sendBtn.disabled = true;
+        this.dom.sendBtn.classList.add('opacity-30');
 
-        // Сохранение и рендер пользователя
+        // Пользователь (без аватара, Gemini-style)
         this.activeChat.messages.push({ role: 'user', text });
         StorageAPI.updateChat(this.activeChat);
-        this.renderSidebar(); // Обновляем название в сайдбаре
-        this.appendMessageDOM('user', text, true);
+        this.renderSidebar();
+        this.appendMessageDOM('user', text, null, true);
+        this.scrollToBottom();
 
-        // Индикатор набора
+        // Индикатор набора ИИ
         const typingId = this.showTypingIndicator();
         this.scrollToBottom();
 
-        // Генерация ответа
-        const reply = await AIService.generateResponse(this.activeChat.id);
+        // Генерация
+        const response = await AIService.generateResponse(this.activeChat.id);
 
-        // Сохранение и рендер ИИ
         this.removeTypingIndicator(typingId);
-        this.activeChat.messages.push({ role: 'bot', text: reply });
+        
+        // Бот
+        this.activeChat.messages.push({ role: 'bot', text: response.text, time: response.time });
         StorageAPI.updateChat(this.activeChat);
-        this.appendMessageDOM('bot', reply, true);
+        this.appendMessageDOM('bot', response.text, response.time, true);
 
-        // Разблокировка UI
         this.dom.messageInput.disabled = false;
+        this.dom.sendBtn.classList.remove('opacity-30');
         this.dom.messageInput.focus();
         this.scrollToBottom();
     },
 
-    appendMessageDOM(role, text, animate) {
+    appendMessageDOM(role, text, time, animate) {
         const wrapper = document.createElement('div');
         const animClass = animate ? 'message-appear' : '';
-        wrapper.className = `flex items-start gap-4 max-w-3xl mx-auto w-full ${role === 'user' ? 'flex-row-reverse' : ''} ${animClass}`;
+        wrapper.className = `w-full max-w-4xl mx-auto flex ${role === 'user' ? 'justify-end' : 'justify-start'} ${animClass}`;
         
-        const avatar = role === 'bot' 
-            ? `<div class="w-8 h-8 rounded-full bg-gradient-to-br from-accent to-purple-600 flex items-center justify-center shrink-0 shadow-lg shadow-accent/20 border border-white/10"><i data-lucide="sparkles" class="w-4 h-4 text-white"></i></div>`
-            : `<div class="w-8 h-8 rounded-full bg-borderDark flex items-center justify-center shrink-0 border border-gray-700"><i data-lucide="user" class="w-4 h-4 text-gray-400"></i></div>`;
-
-        const bubbleClass = role === 'bot' 
-            ? 'text-gray-100 mt-1' 
-            : 'bg-panelDark border border-borderDark text-white px-5 py-3 rounded-2xl rounded-tr-sm shadow-sm';
-
-        wrapper.innerHTML = `
-            ${avatar}
-            <div class="flex-1 ${role === 'user' ? 'max-w-[80%]' : ''}">
-                ${role === 'bot' ? `<div class="font-semibold text-sm text-gray-300 mb-1 flex items-center gap-2">CCG AI <span class="text-[10px] bg-accent/20 text-accent px-1.5 py-0.5 rounded text-uppercase">PRO</span></div>` : ''}
-                <div class="${bubbleClass}">
-                    <p class="leading-relaxed break-words whitespace-pre-wrap text-[15px]">${this.escapeHTML(text)}</p>
+        if (role === 'user') {
+            wrapper.innerHTML = `
+                <div class="bg-userBubble px-5 py-3.5 rounded-3xl rounded-tr-sm max-w-[85%] md:max-w-[75%] text-gray-100 shadow-sm">
+                    <p class="whitespace-pre-wrap leading-relaxed text-[15px]">${this.escapeHTML(text)}</p>
                 </div>
-            </div>
-        `;
+            `;
+        } else {
+            // AI Message (Gemini style: Icon on left, plain text block)
+            const timeHTML = time ? `<div class="text-[11px] text-gray-500 mt-3 font-mono flex items-center gap-1.5"><i data-lucide="clock" class="w-3 h-3"></i> ${time} с</div>` : '';
+            wrapper.innerHTML = `
+                <div class="flex items-start gap-4 max-w-[95%]">
+                    <div class="mt-1 w-8 h-8 rounded-full flex items-center justify-center shrink-0">
+                        <i data-lucide="sparkles" class="w-6 h-6 text-accent"></i>
+                    </div>
+                    <div class="flex-1 pt-1">
+                        <div class="text-gray-100 leading-relaxed whitespace-pre-wrap text-[15px]">${this.escapeHTML(text)}</div>
+                        ${timeHTML}
+                    </div>
+                </div>
+            `;
+        }
         
         this.dom.chatContainer.appendChild(wrapper);
         lucide.createIcons({ root: wrapper });
@@ -326,18 +332,19 @@ const UI = {
         const id = 'typing-' + Date.now();
         const wrapper = document.createElement('div');
         wrapper.id = id;
-        wrapper.className = "flex items-start gap-4 max-w-3xl mx-auto w-full message-appear";
+        wrapper.className = "w-full max-w-4xl mx-auto flex justify-start message-appear";
         
         wrapper.innerHTML = `
-            <div class="w-8 h-8 rounded-full bg-gradient-to-br from-accent to-purple-600 flex items-center justify-center shrink-0 border border-white/10">
-                <i data-lucide="sparkles" class="w-4 h-4 text-white"></i>
-            </div>
-            <div class="flex-1 mt-1">
-                <div class="font-semibold text-sm text-gray-300 mb-2">CCG AI</div>
-                <div class="typing-indicator px-1">
-                    <div class="typing-dot"></div>
-                    <div class="typing-dot"></div>
-                    <div class="typing-dot"></div>
+            <div class="flex items-start gap-4">
+                <div class="mt-1 w-8 h-8 rounded-full flex items-center justify-center shrink-0">
+                    <i data-lucide="sparkles" class="w-6 h-6 text-accent"></i>
+                </div>
+                <div class="flex-1 pt-1.5">
+                    <div class="typing-indicator">
+                        <div class="typing-dot"></div>
+                        <div class="typing-dot"></div>
+                        <div class="typing-dot"></div>
+                    </div>
                 </div>
             </div>
         `;
@@ -366,96 +373,86 @@ const UI = {
         });
     },
 
-    // --- Settings & Prompts Logic ---
+    // --- Настройки ---
 
     openSettings() {
         this.dom.settingsModal.classList.remove('hidden');
-        // Анимация появления
-        setTimeout(() => {
-            this.dom.settingsContent.classList.remove('scale-95', 'opacity-0');
-            this.dom.settingsContent.classList.add('scale-100', 'opacity-100');
-        }, 10);
-        
-        this.tempScript = [...StorageAPI.getScript()];
+        this.tempScript = JSON.parse(JSON.stringify(StorageAPI.getScript())); // Deep copy
         this.renderSettingsScript();
-        
-        // Открываем первую вкладку
-        this.switchSettingsTab(document.querySelector('.tab-btn[data-target="tab-general"]'));
+        this.switchSettingsTab(document.querySelector('.tab-btn[data-target="tab-prompts"]'));
     },
 
     closeSettings() {
-        this.dom.settingsContent.classList.remove('scale-100', 'opacity-100');
-        this.dom.settingsContent.classList.add('scale-95', 'opacity-0');
-        setTimeout(() => {
-            this.dom.settingsModal.classList.add('hidden');
-        }, 300);
+        this.dom.settingsModal.classList.add('hidden');
     },
 
     switchSettingsTab(btnNode) {
-        // Смена активного класса
         document.querySelectorAll('.tab-btn').forEach(b => {
-            b.classList.remove('active', 'text-white');
+            b.classList.remove('active', 'text-white', 'bg-panelDark');
             b.classList.add('text-gray-400');
         });
-        btnNode.classList.add('active', 'text-white');
+        btnNode.classList.add('active', 'text-white', 'bg-panelDark');
         btnNode.classList.remove('text-gray-400');
 
-        // Показ контента
         document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
-        const targetId = btnNode.getAttribute('data-target');
-        document.getElementById(targetId).classList.remove('hidden');
-
-        // Показывать кнопку сохранения только для Базы знаний
-        if (targetId === 'tab-prompts') {
-            this.dom.settingsFooter.classList.remove('hidden');
-        } else {
-            this.dom.settingsFooter.classList.add('hidden');
-        }
+        document.getElementById(btnNode.getAttribute('data-target')).classList.remove('hidden');
     },
 
     renderSettingsScript() {
         this.dom.replicasList.innerHTML = '';
-        this.tempScript.forEach((text, index) => {
-            this.dom.replicasList.appendChild(this.createReplicaInput(text));
+        this.tempScript.forEach((item) => {
+            this.dom.replicasList.appendChild(this.createReplicaInput(item));
         });
         lucide.createIcons({ root: this.dom.replicasList });
     },
 
-    createReplicaInput(text) {
+    createReplicaInput(item) {
         const div = document.createElement('div');
-        div.className = "flex gap-2 group items-start";
+        div.className = "flex flex-col gap-2 p-4 bg-bgDark border border-borderDark rounded-xl group";
         div.innerHTML = `
-            <textarea class="flex-1 bg-bgDark border border-borderDark rounded-xl p-3 text-sm text-gray-200 focus:outline-none focus:border-accent transition-colors resize-none h-20 custom-scrollbar" placeholder="Введите ответ ИИ...">${this.escapeHTML(text)}</textarea>
-            <button class="text-gray-500 hover:text-red-400 p-2 transition-colors shrink-0 delete-btn bg-bgDark border border-borderDark rounded-xl h-10 flex items-center justify-center">
-                <i data-lucide="trash-2" class="w-4 h-4"></i>
-            </button>
+            <textarea class="w-full bg-transparent text-sm text-gray-200 focus:outline-none resize-none h-16 custom-scrollbar replica-text" placeholder="Текст ответа...">${this.escapeHTML(item.text)}</textarea>
+            <div class="flex items-center justify-between border-t border-borderDark pt-3 mt-1">
+                <div class="flex items-center gap-2">
+                    <i data-lucide="clock" class="w-4 h-4 text-gray-500"></i>
+                    <span class="text-xs text-gray-400">Время ответа (сек):</span>
+                    <input type="number" step="0.1" min="0" value="${item.delay}" class="w-16 bg-panelDark border border-borderDark rounded text-xs px-2 py-1 text-white outline-none focus:border-accent replica-delay">
+                </div>
+                <button class="text-gray-500 hover:text-red-400 transition-colors delete-btn">
+                    <i data-lucide="trash-2" class="w-4 h-4"></i>
+                </button>
+            </div>
         `;
         div.querySelector('.delete-btn').addEventListener('click', () => div.remove());
         return div;
     },
 
     addReplicaInput() {
-        const el = this.createReplicaInput("");
+        const el = this.createReplicaInput({ text: "", delay: 1.5 });
         this.dom.replicasList.appendChild(el);
         lucide.createIcons({ root: el });
         el.querySelector('textarea').focus();
     },
 
     clearAllReplicas() {
-        if(confirm("Удалить все ответы из базы знаний?")) {
+        if(confirm("Очистить весь сценарий?")) {
             this.dom.replicasList.innerHTML = '';
         }
     },
 
     saveSettings() {
-        const textareas = this.dom.replicasList.querySelectorAll('textarea');
-        const newScript = Array.from(textareas).map(t => t.value.trim()).filter(v => v);
-        StorageAPI.saveScript(newScript);
+        const items = Array.from(this.dom.replicasList.children).map(div => {
+            return {
+                text: div.querySelector('.replica-text').value.trim(),
+                delay: parseFloat(div.querySelector('.replica-delay').value) || 0
+            };
+        }).filter(item => item.text !== "");
+        
+        StorageAPI.saveScript(items);
         this.closeSettings();
     },
 
     deleteAllChats() {
-        if(confirm("Внимание! Это удалит всю историю диалогов. Продолжить?")) {
+        if(confirm("Удалить всю историю?")) {
             StorageAPI.deleteAllChats();
             this.activeChat = StorageAPI.createChat();
             this.renderSidebar();
@@ -464,7 +461,7 @@ const UI = {
         }
     },
 
-    // --- Utils ---
+    // --- Утилиты ---
 
     toggleMobileMenu(show) {
         if (show) {
@@ -483,6 +480,4 @@ const UI = {
     }
 };
 
-document.addEventListener('DOMContentLoaded', () => {
-    UI.init();
-});
+document.addEventListener('DOMContentLoaded', () => UI.init());
