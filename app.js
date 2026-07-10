@@ -258,33 +258,44 @@ const UI = {
         this.dom.messageInput.disabled = true;
         this.dom.sendBtn.classList.add('opacity-30');
 
-        // Пользователь
         this.activeChat.messages.push({ role: 'user', text });
         StorageAPI.updateChat(this.activeChat);
         this.renderSidebar();
         this.appendMessageDOM('user', text, null, true);
+        
+        // Скроллим сразу после сообщения пользователя
         this.scrollToBottom();
 
         const typingId = this.showTypingIndicator();
         this.scrollToBottom();
 
-        // Генерация (передаем текущий индекс чата)
+        // Генерация
         const response = await AIService.generateResponse(this.activeChat.id, this.activeChat.scriptIndex);
 
         this.removeTypingIndicator(typingId);
         
-        // Обновляем индекс в объекте чата перед сохранением
         this.activeChat.scriptIndex = response.newIndex;
         this.activeChat.messages.push({ role: 'bot', text: response.text, time: response.time });
         
-        // Единое сохранение состояния
         StorageAPI.updateChat(this.activeChat);
         this.appendMessageDOM('bot', response.text, response.time, true);
 
         this.dom.messageInput.disabled = false;
         this.dom.sendBtn.classList.remove('opacity-30');
         this.dom.messageInput.focus();
+        
+        // Принудительный скролл после появления ответа бота
         this.scrollToBottom();
+    },
+
+    scrollToBottom() {
+        // requestAnimationFrame гарантирует, что прокрутка произойдет после завершения рендеринга
+        requestAnimationFrame(() => {
+            this.dom.chatContainer.scrollTo({
+                top: this.dom.chatContainer.scrollHeight,
+                behavior: 'smooth'
+            });
+        });
     },
 
     appendMessageDOM(role, text, time, animate) {
