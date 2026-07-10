@@ -53,3 +53,21 @@
     background-color: #1e1f20;
     color: white;
 }
+/* Улучшаем адаптивность области чата */
+#chatContainer {
+    /* Добавляем достаточный отступ снизу, чтобы последнее сообщение не перекрывалось */
+    padding-bottom: 120px !important; 
+}
+
+/* Фикс для мобильных клавиатур */
+@media (max-width: 768px) {
+    main {
+        height: 100vh;
+        /* Используем dvh для правильного учета высоты с учетом тулбаров браузера */
+        height: 100dvh; 
+    }
+}
+
+.custom-scrollbar {
+    scrollbar-gutter: stable;
+}
